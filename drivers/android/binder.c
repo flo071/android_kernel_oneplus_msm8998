@@ -3165,10 +3165,9 @@ static void binder_transaction(struct binder_proc *proc,
 				return_error_line = __LINE__;
 				goto err_bad_offset;
 			}
-			if (copy_from_user_preempt_disabled(
-					sg_bufp,
-					(const void __user *)(uintptr_t)
-					bp->buffer, bp->length)) {
+			if (copy_from_user(sg_bufp,
+					   (const void __user *)(uintptr_t)
+					   bp->buffer, bp->length)) {
 				binder_user_error("%d:%d got transaction with invalid offsets ptr\n",
 						  proc->pid, thread->pid);
 				return_error_param = -EFAULT;
@@ -3542,8 +3541,7 @@ static int binder_thread_write(struct binder_proc *proc,
 		case BC_REPLY_SG: {
 			struct binder_transaction_data_sg tr;
 
-			if (copy_from_user_preempt_disabled(&tr, ptr,
-							    sizeof(tr)))
+			if (copy_from_user(&tr, ptr, sizeof(tr)))
 				return -EFAULT;
 			ptr += sizeof(tr);
 			binder_transaction(proc, thread, &tr.transaction_data,
@@ -4582,6 +4580,8 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	/*pr_info("binder_ioctl: %d:%d %x %lx\n",
 			proc->pid, current->pid, cmd, arg);*/
 
+	binder_selftest_alloc(&proc->alloc);
+
 	trace_binder_ioctl(cmd, arg);
 
 	ret = wait_event_interruptible(binder_user_error_wait, binder_stop_on_user_error < 2);
@@ -5427,6 +5427,8 @@ static void print_binder_proc_stats(struct seq_file *m,
 	count = binder_alloc_get_allocated_count(&proc->alloc);
 	seq_printf(m, "  buffers: %d\n", count);
 
+	binder_alloc_print_pages(m, &proc->alloc);
+
 	count = 0;
 	binder_inner_proc_lock(proc);
 	list_for_each_entry(w, &proc->todo, entry) {
@@ -5622,6 +5624,8 @@ static int __init binder_init(void)
 	char *device_name, *device_names;
 	struct binder_device *device;
 	struct hlist_node *tmp;
+
+	binder_alloc_shrinker_init();
 
 	atomic_set(&binder_transaction_log.cur, ~0U);
 	atomic_set(&binder_transaction_log_failed.cur, ~0U);
